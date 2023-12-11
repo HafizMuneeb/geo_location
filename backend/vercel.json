@@ -1,9 +1,6 @@
 {
-    "version":2,
-    "builds": [
-        {"src": "/api/(.*)", "use": "@vercel/node"}
-    ],
-    "routes": [
+    
+    "rewrites": [
         {
             "src": "/api/(.*)",
             "dest": "/api"
