@@ -165,7 +165,7 @@
     // Function to fetch data from your API
     async function fetchData() {
       try {
-        const response = await fetch("https://geo-location-ten.vercel.app/");
+        const response = await fetch("http://localhost:3000/api/locations");
 
         if (response.ok) {
           apiData = await response.json();
