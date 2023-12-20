@@ -1,436 +1,807 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Geo Location for Colleges</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
-  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.0/mapbox-gl-geocoder.min.js"></script>
-  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.0/mapbox-gl-geocoder.css" type="text/css" />
-  <!-- Include Google Chart Library -->
-  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-
-    #map {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 100%;
-    }
-
-    #search {
-      position: absolute;
-      top: 80%;
-      left: 75%;
-      width: 20%;
-      height: 4.5%;
-      z-index: 1;
-      color: grey;
-      font-size: 14px;
-      border-radius: 10px;
-      border: none;
-      background-color: lightcyan;
-    }
-
-    #filter {
-      position: absolute;
-      top: 50px;
-      left: 10px;
-      z-index: 1;
-    }
-
-    #table-container {
-      position: absolute;
-      top: 55%;
-      left: 10px;
-      z-index: 1;
-      background-color: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 8px;
-      width: 20%;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-
-    #college-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    #college-table th,
-    #college-table td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-    #college-table tr:hover {
-      background-color: #f2f2f2;
-    }
-
-    #college-table tr.selected {
-      background-color: black;
-      color: white;
-    }
-
-    .filter-dropdown {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-      appearance: none;
-      background: url("https://docs.mapbox.com/help/demos/custom-markers-gl-js/mapbox-icon.png")
-        no-repeat right center;
-    }
-
-    .filter-label {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    /* Define custom marker styles */
-    .custom-marker {
-      width: 10px;
-      height: 15px;
-      cursor: pointer;
-      background-size: cover;
-    }
-
-    #chart_div {
-      position: absolute;
-      background-color: rgba(0, 0, 0, 0.5);
-      top: 30%;
-      left: 10px;
-      width: 20%;
-      height: 20vh;
-    }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <input id="search" type="text" placeholder="Search Institution" />
-  <div id="filter">
-    <label class="filter-label" for="state">State:</label>
-    <select class="filter-dropdown" id="state"></select>
-    <label class="filter-label" for="pell">Pell:</label>
-    <select class="filter-dropdown" id="pell">
-      <option value="All">All</option>
-      <option value="Yes">Yes</option>
-      <option value="No">No</option>
-    </select>
-    <label class="filter-label" for="netprice">Net Price:</label>
-    <select class="filter-dropdown" id="netprice">
-      <option value="All">All</option>
-      <option value="High">High</option>
-      <option value="Medium">Medium</option>
-      <option value="Low">Low</option>
-    </select>
-  </div>
-  <div id="table-container">
-    <table id="college-table"></table>
-  </div>
-  <!-- Add a container for the Google Chart -->
-  <div id="chart_div"></div>
-
-  <script>
-    mapboxgl.accessToken = "pk.eyJ1IjoibXVuZWViMzgxYSIsImEiOiJjbHBtN29kZnYwNzU4MmlwNnZmaXBnY2R3In0.AU7j_Yfo2GlAG2Kl_10isA";
-
-    const map = new mapboxgl.Map({
-      container: "map",
-      style: "mapbox://styles/mapbox/light-v10",
-    });
-
-    // Variable to store API response
-    let apiData = null;
-
-    // Array of custom marker images
-    const markerImages = [
-      "markers/blue.png",
-      "markers/brown.png",
-      "markers/yellow.png",
-      "markers/light-green.png",
-      "markers/mehndi.png",
-      "markers/dark-green.png",
-      "markers/orange.png",
-      "markers/red.png",
-    ];
-
-    // Function to fetch data from your API
-    async function fetchData() {
-      try {
-        const response = await fetch("http://localhost:3000/api/locations");
-
-        if (response.ok) {
-          apiData = await response.json();
-
-          // Calculate bounds for fitting the map
-          const bounds = new mapboxgl.LngLatBounds();
-
-          // Add markers to the map and extend bounds
-          apiData.forEach((location, index) => {
-            // Check if the location has latitude and longitude
-            if (location.geo_latitude && location.geo_longitude) {
-              const markerElement = document.createElement("div");
-              markerElement.className = "custom-marker";
-              markerElement.style.backgroundImage = `url('${
-                markerImages[index % markerImages.length]
-              }')`;
-
-              const popup = new mapboxgl.Popup().setHTML(
-                `<h3>${location.college}</h3>`
-              );
-
-              new mapboxgl.Marker({ element: markerElement })
-                .setLngLat([location.geo_longitude, location.geo_latitude])
-                .setPopup(popup)
-                .addTo(map);
-
-              // Extend bounds for fitting the map
-              bounds.extend([location.geo_longitude, location.geo_latitude]);
-            }
-          });
-
-          // Fit the map to the calculated bounds
-          map.fitBounds(bounds, { padding: 50 });
-
-          // Add search functionality
-          const geocoder = new MapboxGeocoder({
-            accessToken: mapboxgl.accessToken,
-            mapboxgl: mapboxgl,
-            placeholder: "Search for institutions",
-          });
-
-          document.getElementById("search").appendChild(geocoder.onAdd(map));
-
-          // Populate filter dropdowns
-          populateDropdown("state", getUniqueValues("state"));
-          populateDropdown("pell", getUniqueValues("pell"));
-          populateDropdown("netprice", getUniqueValues("netprice"));
-
-          // Populate table
-          populateTable();
-
-          // Draw Google Chart
-          drawChart();
-        } else {
-          console.error("Failed to fetch data from API");
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
+  <head>
+    <meta charset="utf-8" />
+    <title>Geo Location for Colleges</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.0/mapbox-gl-geocoder.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.0/mapbox-gl-geocoder.css"
+      type="text/css"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
       }
-    }
 
-    function drawChart() {
-      // Load the Visualization API and the corechart package.
-      google.charts.load('current', { 'packages': ['corechart'] });
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+      }
 
-      // Set a callback to run when the Google Visualization API is loaded.
-      google.charts.setOnLoadCallback(drawVisualization);
+      #custom-search {
+        position: absolute;
+        top: 85%;
+        left: 80%;
+        transform: translateX(-50%);
+        width: 20%;
+        height: 5%;
+        z-index: 1;
+        color: grey;
+        font-size: 20px;
+        border-radius: none;
+        border: none;
+        background-color: lightcyan;
+      }
 
-      function drawVisualization() {
-          // Create and populate the data table.
-          var data = new google.visualization.DataTable();
-          data.addColumn('string', 'College');
-          data.addColumn('number', 'Net Price');
-          data.addColumn('number', 'Pell');
+      #filter {
+        width: 40%;
+        display: flex;
+        padding: 10px;
+        text-align: center;
+        justify-content: center;
+        position: absolute;
+        top: 50px;
+        left: 5%;
+        z-index: 1;
+      }
 
-          var topColleges = apiData.slice(0, 15);
+      #table-container {
+        position: absolute;
+        top: 63%;
+        left: 5%;
+        z-index: 1;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 8px;
+        width: 20%;
+        max-height: 200px;
+        overflow-y: hidden;
+      }
 
-          topColleges.forEach((location) => {
-            data.addRow([location.college ,parseFloat(location.netprice), parseFloat(location.pell)]);
-        });
+      #table-container:hover {
+        overflow-y: scroll;
+      }
 
-        // Set chart options
-        var options = {
-          title: 'Scatter Chart: Pell vs Net Price',
-          hAxis: { title: 'Net Price' },
-          vAxis: { title: 'Pell' },
-          legend: 'none',
-          tooltip: { isHtml: true } // Enable HTML content in tooltips
-        };
+      #college-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
 
-        // Instantiate and draw the chart.
-        var chart = new google.visualization.ScatterChart(document.getElementById('chart_div'));
+      #college-table th,
+      #college-table td {
+        border-top: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        text-align: left;
+        color: #c0a9af;
+        font-size: 10px;
+        padding-right: 8px;
+      }
 
-          // Add event listener for handling tooltips
-          google.visualization.events.addListener(chart, 'onmouseover', function (e) {
-            var tooltip = document.querySelector('#chart-tooltip');
-            tooltip.innerHTML = e.row !== null ? '<div>' + apiData[e.row].college + '</div>' : '';
-          });
+      #college-table tr {
+        position: relative;
+        overflow: hidden;
+      }
 
-          google.visualization.events.addListener(chart, 'onmouseout', function () {
-            var tooltip = document.querySelector('#chart-tooltip');
-            tooltip.innerHTML = '';
-          });
+      #college-table tr.selected {
+        background-color: black;
+        color: white;
+      }
 
-          chart.draw(data, options);
+      .filter-dropdown {
+        width: 20%;
+        padding: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+        appearance: none;
+        text-align: center;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: white;
+        font-size: 15px;
+      }
+
+      .filter-label {
+        padding-right: 15px;
+        padding-left: 15px;
+        display: flex;
+      }
+
+      /* Define custom marker styles */
+      .custom-marker {
+        width: 10px;
+        height: 15px;
+        cursor: pointer;
+        background-size: cover;
+      }
+
+      #d3-chart {
+        position: absolute;
+        top: 16%;
+        left: 5%;
+        width: 90%;
+        height: 20vh;
+      }
+
+      .color-bar {
+        display: inline-block;
+        width: 9px;
+        height: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 1;
+        margin-left: -10px;
+      }
+
+      .icon {
+        color: black;
+        margin-left: 5px;
+      }
+
+      .checkbox-container {
+        position: absolute;
+        top: 10%;
+        left: 5%;
+        display: flex;
+        gap: 10px;
+        margin: 20px;
+      }
+
+      input[type="checkbox"] {
+        position: relative;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #3498db;
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      input[type="checkbox"]:checked::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 12px;
+        background-image: url("tick.png"); /* Replace with the path to your image */
+        background-size: cover;
+        display: none;
+      }
+
+      input[type="checkbox"]:checked::before {
+        display: block;
+      }
+
+      input[type="checkbox"]:focus {
+        outline: none;
+      }
+
+      label {
+        color: black;
+        display: flex;
+        align-items: center;
+      }
+
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+
+      #loading-spinner {
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid #3498db;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
         }
-    }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
 
-    function getUniqueValues(key) {
-      return [...new Set(apiData.map((item) => item[key]))];
-    }
+      @media screen and (max-width: 600px) {
+        #custom-search {
+          width: 50%;
+          top: 95%;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 16px;
+        }
 
-    function populateDropdown(dropdownId, values) {
-      const dropdown = document.getElementById(dropdownId);
+        #filter {
+          width: 90%;
+          left: 5%;
+        }
 
-      values.forEach((value) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value;
-        dropdown.appendChild(option);
+        #table-container {
+          width: 50%;
+          left: 5%;
+        }
+
+        #d3-chart {
+          width: 50%;
+          left: 5%;
+        }
+
+        .checkbox-container {
+          left: 5%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <input id="custom-search" type="text" placeholder="Search Institution" />
+    <div id="filter">
+      <label class="filter-label" for="state"></label>
+      <select class="filter-dropdown" id="state">
+        <option value="state">
+          Select a State <span class="icon">&#9660;</span>
+        </option>
+      </select>
+      <label class="filter-label" for="pell"></label>
+      <select class="filter-dropdown" id="pell">
+        <option value="All">Low Pell <span class="icon">&#9660;</span></option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+      <label class="filter-label" for="netprice"></label>
+      <select class="filter-dropdown" id="netprice">
+        <option value="All">
+          All Net Prices <span class="icon">&#9660;</span>
+        </option>
+        <option value="High">High</option>
+        <option value="Medium">Medium</option>
+        <option value="Low">Low</option>
+      </select>
+    </div>
+    <div id="table-container">
+      <table id="college-table"></table>
+    </div>
+    <div id="d3-chart"></div>
+    <div id="tooltip"></div>
+    <div class="checkbox-container">
+      <label> <input type="checkbox" id="privateCheckbox" /> Private </label>
+      <label>
+        <input type="checkbox" id="lowEndowmentCheckbox" /> Public with Low
+        Endowment
+      </label>
+      <label>
+        <input type="checkbox" id="highEndowmentCheckbox" /> Public with High
+        Endowment
+      </label>
+    </div>
+    <div id="loading-overlay">
+      <div id="loading-spinner"></div>
+    </div>
+    <script>
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoibXVuZWViMzgxYSIsImEiOiJjbHBtN29kZnYwNzU4MmlwNnZmaXBnY2R3In0.AU7j_Yfo2GlAG2Kl_10isA";
+
+      // Showing map on the web page
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/light-v10",
       });
 
-      dropdown.addEventListener("change", applyFilters);
-    }
+      // Storing API response
+      let apiData = null;
 
-    function applyFilters() {
-      const selectedState = document.getElementById("state").value;
-      const selectedPell = document.getElementById("pell").value;
-      const selectedNetPrice = document.getElementById("netprice").value;
+      // Creating an array for different markers
+      const markerImages = [
+        "markers/blue.png",
+        "markers/brown.png",
+        "markers/yellow.png",
+        "markers/light-green.png",
+        "markers/mehndi.png",
+        "markers/dark-green.png",
+        "markers/orange.png",
+        "markers/red.png",
+      ];
 
-      // Remove existing markers
-      document
-        .querySelectorAll(".custom-marker")
-        .forEach((marker) => marker.remove());
+      // Function to get data from your API Response
+      async function fetchData() {
+        try {
+          const response = await fetch("http://localhost:3000/api/locations");
 
-      // Filter and display matching markers
-      apiData.forEach((location, index) => {
-        if (
-          location.geo_latitude &&
-          location.geo_longitude &&
-          (selectedState === "All" || location.state === selectedState) &&
-          (selectedPell === "All" || location.pell === selectedPell) &&
-          (selectedNetPrice === "All" ||
-            location.netprice === selectedNetPrice)
-        ) {
+          if (response.ok) {
+            apiData = await response.json();
+
+            // Calculate bounds for fitting the map
+            const bounds = new mapboxgl.LngLatBounds();
+
+            // Add markers to the map and extend bounds
+            apiData.forEach((location, index) => {
+              // Check if the location has latitude and longitude
+              if (location.geo_latitude && location.geo_longitude) {
+                const markerElement = document.createElement("div");
+                markerElement.className = "custom-marker";
+                markerElement.style.backgroundImage = `url('${
+                  markerImages[index % markerImages.length]
+                }')`;
+
+                const popup = new mapboxgl.Popup().setHTML(
+                  `<h3>${location.college}</h3>`
+                );
+
+                new mapboxgl.Marker({ element: markerElement })
+                  .setLngLat([location.geo_longitude, location.geo_latitude])
+                  .setPopup(popup)
+                  .addTo(map);
+
+                // Extend bounds for fitting the map
+                bounds.extend([location.geo_longitude, location.geo_latitude]);
+              }
+            });
+
+            // Fit the map to the calculated bounds
+            map.fitBounds(bounds, { padding: 50 });
+
+            // Add custom search box
+            const customSearch = document.getElementById("custom-search");
+            customSearch.addEventListener("input", handleCustomSearch);
+
+            // Populate filter dropdowns
+            populateDropdown("state", getUniqueValues("state"));
+            populateDropdown("pell", getUniqueValues("pell"));
+            populateDropdown("netprice", getUniqueValues("netprice"));
+
+            // Populate table
+            populateTable();
+
+            // Call the createScatterChart function to use the apiData
+          } else {
+            console.error("Failed to fetch data from API");
+          }
+        } catch (error) {
+          console.error("Error fetching data:", error);
+        }
+      }
+
+      function hideLoadingOverlay() {
+        const loadingOverlay = document.getElementById("loading-overlay");
+        loadingOverlay.style.display = "none";
+      }
+
+      fetchData()
+        .then(() => hideLoadingOverlay())
+        .catch((error) => {
+          console.error("Error during data fetching:", error);
+          hideLoadingOverlay(); // Hide the loading overlay in case of an error
+        });
+
+      function handleCustomSearch() {
+        const searchTerm = document
+          .getElementById("custom-search")
+          .value.toLowerCase();
+
+        // Find the first matching location
+        const foundLocation = apiData.find(
+          (location) =>
+            location.college.toLowerCase().includes(searchTerm) &&
+            location.geo_latitude &&
+            location.geo_longitude
+        );
+
+        if (foundLocation) {
+          // Zoom to the found location and create a marker
           const markerElement = document.createElement("div");
           markerElement.className = "custom-marker";
           markerElement.style.backgroundImage = `url('${
-            markerImages[index % markerImages.length]
+            markerImages[0 % markerImages.length]
           }')`;
 
           const popup = new mapboxgl.Popup().setHTML(
-            `<h3>${location.college}</h3>`
+            `<h3>${foundLocation.college}</h3>`
           );
 
-          const marker = new mapboxgl.Marker({ element: markerElement })
-            .setLngLat([location.geo_longitude, location.geo_latitude])
+          new mapboxgl.Marker({ element: markerElement })
+            .setLngLat([
+              foundLocation.geo_longitude,
+              foundLocation.geo_latitude,
+            ])
             .setPopup(popup)
             .addTo(map);
 
-          // Add click event to select the corresponding row in the table
-          marker.getElement().addEventListener("click", () => {
-            highlightTableRow(location.college);
-            zoomToLocation(location.geo_longitude, location.geo_latitude);
+          // Fly to the selected location
+          map.flyTo({
+            center: [foundLocation.geo_longitude, foundLocation.geo_latitude],
+            zoom: 12,
           });
         }
-      });
-
-      // Update table
-      populateTable();
-
-      // Draw Google Chart
-      drawChart();
-
-      // Add highlight to the selected row
-      const selectedCollege = document.querySelector("#college-table tr.selected");
-      if (selectedCollege) {
-        const collegeName = selectedCollege.getAttribute("data-college");
-        highlightMapMarker(collegeName);
       }
-    }
 
-    function populateTable() {
-      const table = document.getElementById("college-table");
-      table.innerHTML = ""; // Clear existing table
+      function getUniqueValues(key) {
+        return [...new Set(apiData.map((item) => item[key]))];
+      }
 
-      // Create table header
-      const headerRow = table.insertRow();
-      const headers = ["College", "State", "Pell", "Net Price"];
-      headers.forEach((header) => {
-        const th = document.createElement("th");
-        th.textContent = header;
-        headerRow.appendChild(th);
-      });
+      function populateDropdown(dropdownId, values) {
+        const dropdown = document.getElementById(dropdownId);
 
-      // Create table rows
-      apiData.forEach((location) => {
-        const row = table.insertRow();
-        row.setAttribute("data-college", location.college); // Set data attribute for identification
-
-        const values = [
-          location.college,
-          location.state,
-          location.pell,
-          location.netprice,
-        ];
         values.forEach((value) => {
-          const td = row.insertCell();
-          td.textContent = value;
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          dropdown.appendChild(option);
         });
 
-        // Add click event to zoom in on map
-        row.addEventListener("click", () => {
-          highlightTableRow(location.college);
-          zoomToLocation(location.geo_longitude, location.geo_latitude);
-        });
-
-        // Add hover effect
-        row.addEventListener("mouseover", () => {
-          row.style.backgroundColor = "rgba(0, 0, 0, 0.1)";
-        });
-
-        row.addEventListener("mouseout", () => {
-          row.style.backgroundColor = "transparent";
-        });
-      });
-    }
-
-    function highlightTableRow(collegeName) {
-      // Remove the "selected" class from all rows
-      document
-        .querySelectorAll("#college-table tr")
-        .forEach((row) => row.classList.remove("selected"));
-
-      // Find the row with the corresponding college name and add the "selected" class
-      const row = document.querySelector(
-        `#college-table tr[data-college="${collegeName}"]`
-      );
-      if (row) {
-        row.classList.add("selected");
+        dropdown.addEventListener("change", applyFilters);
       }
-    }
 
-    function highlightMapMarker(collegeName) {
-      const location = apiData.find(
-        (location) => location.college === collegeName
-      );
+      function applyFilters() {
+        const selectedState = document.getElementById("state").value;
+        const selectedPell = document.getElementById("pell").value;
+        const selectedNetPrice = document.getElementById("netprice").value;
 
-      if (location) {
+        // Remove existing markers
+        document
+          .querySelectorAll(".custom-marker")
+          .forEach((marker) => marker.remove());
+
+        // Filter and display matching markers
+        apiData.forEach((location, index) => {
+          if (
+            location.geo_latitude &&
+            location.geo_longitude &&
+            (selectedState === "All" || location.state === selectedState) &&
+            (selectedPell === "All" || location.pell === selectedPell) &&
+            (selectedNetPrice === "All" ||
+              location.netprice === selectedNetPrice)
+          ) {
+            const markerElement = document.createElement("div");
+            markerElement.className = "custom-marker";
+            markerElement.style.backgroundImage = `url('${
+              markerImages[index % markerImages.length]
+            }')`;
+
+            const popup = new mapboxgl.Popup().setHTML(
+              `<h3>${location.college}</h3>`
+            );
+
+            const marker = new mapboxgl.Marker({ element: markerElement })
+              .setLngLat([location.geo_longitude, location.geo_latitude])
+              .setPopup(popup)
+              .addTo(map);
+
+            // Add click event to select the corresponding row in the table
+            marker.getElement().addEventListener("click", () => {
+              highlightTableRow(location.college);
+              zoomToLocation(location.geo_longitude, location.geo_latitude);
+            });
+          }
+        });
+
+        // Update table
+        populateTable();
+
+
+        // Add highlight to the selected row
+        const selectedCollege = document.querySelector(
+          "#college-table tr.selected"
+        );
+        if (selectedCollege) {
+          const collegeName = selectedCollege.getAttribute("data-college");
+          highlightMapMarker(collegeName);
+        }
+      }
+      function handleTableRowClick(location) {
+        // Show a popup with the college name
+        new mapboxgl.Popup()
+          .setLngLat([location.geo_longitude, location.geo_latitude])
+          .setHTML(`<h5>${location.college}</h5>`)
+          .addTo(map);
+
+        // Optionally, you can also highlight the clicked row
+        highlightTableRow(location.college);
+      }
+      function populateTable() {
+        const table = document.getElementById("college-table");
+        table.innerHTML = ""; // Clear existing table
+
+        // Create table header
+        const headerRow = table.insertRow();
+        const headers = ["College", "State", "Pell", "Net Price"];
+        headers.forEach((header) => {
+          const th = document.createElement("th");
+          th.textContent = header;
+          headerRow.appendChild(th);
+        });
+
+        // Create table rows
+        apiData.forEach((location, index) => {
+          const row = table.insertRow();
+          row.setAttribute("data-college", location.college); // Set data attribute for identification
+
+          const values = [
+            location.college,
+            location.state,
+            location.pell,
+            location.netprice,
+          ];
+          values.forEach((value, colIndex) => {
+            const td = row.insertCell();
+
+            // Add a pseudo-element for the colored bar in the first column
+            if (colIndex === 0) {
+              const colorBar = document.createElement("span");
+              colorBar.className = "color-bar";
+              colorBar.style.backgroundColor = getColorForIndex(index);
+              td.appendChild(colorBar);
+            }
+
+            td.appendChild(document.createTextNode(value));
+          });
+
+          // Add click event to zoom in on map
+          row.addEventListener("click", () => {
+            handleTableRowClick(location);
+          });
+
+          // Add hover effect
+          row.addEventListener("mouseover", () => {
+            row.style.backgroundColor = "black";
+          });
+
+          row.addEventListener("mouseout", () => {
+            row.style.backgroundColor = "transparent";
+          });
+        });
+      }
+
+      // Function to get a color based on the index
+      function getColorForIndex(index) {
+        // Define an array of colors
+        const colors = [
+          "#57BB70",
+          "#49949B ",
+          "#52A881 ",
+          "#CED54D",
+          "#D5844D",
+          "#AFA040",
+        ];
+
+        // Use the index to select a color from the array
+        return colors[index % colors.length];
+      }
+
+      function highlightTableRow(collegeName) {
+        // Remove the "selected" class from all rows
+        document
+          .querySelectorAll("#college-table tr")
+          .forEach((row) => row.classList.remove("selected"));
+
+        // Find the row with the corresponding college name and add the "selected" class
+        const row = document.querySelector(
+          `#college-table tr[data-college="${collegeName}"]`
+        );
+        if (row) {
+          row.classList.add("selected");
+        }
+      }
+
+      function highlightMapMarker(collegeName) {
+        const location = apiData.find(
+          (location) => location.college === collegeName
+        );
+
+        if (location) {
+          map.flyTo({
+            center: [location.geo_longitude, location.geo_latitude],
+            zoom: 14,
+          });
+        }
+      }
+
+      function zoomToLocation(geoLongitude, geoLatitude) {
         map.flyTo({
-          center: [location.geo_longitude, location.geo_latitude],
+          center: [geoLongitude, geoLatitude],
           zoom: 14,
         });
       }
-    }
 
-    function zoomToLocation(geoLongitude, geoLatitude) {
-      map.flyTo({
-        center: [geoLongitude, geoLatitude],
-        zoom: 14,
-      });
-    }
+      function drawD3ScatterChart(data) {
+        // Check if data is not null or undefined
+        if (data && Array.isArray(data)) {
+          // Set up the SVG container
+          const svgWidth = 300;
+          const svgHeight = 300;
+          const margin = { top: 20, right: 20, bottom: 30, left: 50 };
 
-    // Call the fetchData function to fetch data and add markers
-    fetchData();
-  </script>
-</body>
+          const svg = d3
+            .select("#d3-chart")
+            .append("svg")
+            .attr("width", svgWidth)
+            .attr("height", svgHeight);
+
+          const colors = [
+            "#57BB70",
+            "#49949B",
+            "#52A881",
+            "#CED54D",
+            "#D5844D",
+            "#AFA040",
+            "#30AA83",
+            "#83789B",
+            "#678993",
+          ];
+          // Create background rectangles with different colors
+          const numRows = 3;
+          const numCols = 3;
+          const rectWidth = svgWidth / numCols;
+          const rectHeight = svgHeight / numRows;
+
+          svg
+            .selectAll("rect")
+            .data(Array.from({ length: numRows * numCols }))
+            .enter()
+            .append("rect")
+            .attr("x", (_, i) => (i % numCols) * rectWidth)
+            .attr("y", (_, i) => Math.floor(i / numCols) * rectHeight)
+            .attr("width", rectWidth)
+            .attr("height", rectHeight)
+            .attr("fill", (_, i) => colors[i % colors.length]);
+
+          // Set up scales
+          const xScale = d3
+            .scaleLinear()
+            .domain([0, d3.max(data, (d) => d.netprice)])
+            .range([margin.left, svgWidth - margin.right]);
+
+          const yScale = d3
+            .scaleLinear()
+            .domain([0, d3.max(data, (d) => d.pell)])
+            .range([svgHeight - margin.bottom, margin.top]);
+
+          // Add circles to represent data points
+          svg
+            .selectAll("circle")
+            .data(data.slice(0, 10))
+            .enter()
+            .append("circle")
+            .attr("cx", (d) => xScale(d.netprice))
+            .attr("cy", (d) => yScale(d.pell))
+            .attr("r", 5)
+            .attr("fill", "white")
+            .append("title")
+            .text((d) => d.college);
+
+          // Add tooltips
+          svg
+            .selectAll("circle")
+            .data(data.slice(0, 10))
+            .append("title")
+            .text((d) => d.college);
+
+          // Set up axes
+          const xAxis = d3.axisBottom(xScale);
+          const yAxis = d3.axisLeft(yScale);
+
+          svg
+            .append("g")
+            .attr("transform", `translate(0, ${svgHeight - margin.bottom})`)
+            .call(xAxis);
+
+          svg
+            .append("g")
+            .attr("transform", `translate(${margin.left}, 0)`)
+            .call(yAxis);
+        } else {
+          // Handle the case where data is not available
+          console.error("Data is null or undefined");
+        }
+      }
+
+      document
+        .getElementById("privateCheckbox")
+        .addEventListener("change", updateMarkers);
+      document
+        .getElementById("lowEndowmentCheckbox")
+        .addEventListener("change", updateMarkers);
+      document
+        .getElementById("highEndowmentCheckbox")
+        .addEventListener("change", updateMarkers);
+
+      // Function to update markers based on checkbox status
+      function updateMarkers() {
+        if (!apiData) {
+          console.error("apiData is null or undefined");
+          return;
+        }
+
+        const privateCheckbox = document.getElementById("privateCheckbox");
+        const lowEndowmentCheckbox = document.getElementById(
+          "lowEndowmentCheckbox"
+        );
+        const highEndowmentCheckbox = document.getElementById(
+          "highEndowmentCheckbox"
+        );
+
+        // Filter data based on checkbox status
+        const filteredData = apiData.filter((location) => {
+          return (
+            (privateCheckbox.checked && location.control === "Private") ||
+            (lowEndowmentCheckbox.checked && location.endowment < 500000) ||
+            (highEndowmentCheckbox.checked && location.endowment >= 500000)
+          );
+        });
+
+        // Remove existing markers
+        document
+          .querySelectorAll(".custom-marker")
+          .forEach((marker) => marker.remove());
+
+        // Add new markers based on filtered data
+        filteredData.forEach((location, index) => {
+          if (location.geo_latitude && location.geo_longitude) {
+            const markerElement = document.createElement("div");
+            markerElement.className = "custom-marker";
+            markerElement.style.backgroundImage = `url('${
+              markerImages[index % markerImages.length]
+            }')`;
+
+            const popup = new mapboxgl.Popup().setHTML(
+              `<h3>${location.college}</h3>`
+            );
+
+            new mapboxgl.Marker({ element: markerElement })
+              .setLngLat([location.geo_longitude, location.geo_latitude])
+              .setPopup(popup)
+              .addTo(map);
+          }
+        });
+      }
+
+      // Initial update to show markers based on default checkbox status
+      updateMarkers();
+
+      // Call the fetchData function to fetch data and add markers
+      fetchData();
+
+      const locationsApiUrl = "http://localhost:3000/api/locations";
+      fetch(locationsApiUrl)
+        .then((response) => response.json())
+        .then((data) => {
+          // Process the data and proceed to the next steps
+          apiData = data; // Update apiData with the fetched data
+          drawD3ScatterChart(data);
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+    </script>
+  </body>
 </html>
